@@ -5,8 +5,12 @@ services:
     tty: true
     volumes:
       - ./src:/app
+      - node_modules:/app/node_modules
     environment:
       - WATCHPACK_POLLING=true
-    command: sh -c "npm run dev"
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
     ports:
       - "3000:3000"
+
+volumes:
+  node_modules:
