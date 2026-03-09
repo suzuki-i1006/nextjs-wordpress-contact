@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 
+// 各フォームの入力内容を定義する型宣言をお忘れなく
 type ContactPayload = {
   name: string;
   email: string;
@@ -7,6 +8,7 @@ type ContactPayload = {
   message: string;
 };
 
+// WordPress API のベースURLを正規化する関数
 const normalizeWordPressBase = (raw: string): string => {
   const withoutTrailingSlash = raw.replace(/\/$/, "");
   if (/\/wp-json\/wp\/v2$/.test(withoutTrailingSlash)) {
@@ -18,6 +20,7 @@ const normalizeWordPressBase = (raw: string): string => {
   return `${withoutTrailingSlash}/wp-json`;
 };
 
+// Basic認証用のヘッダーを構築する関数
 const buildBasicHeader = (user: string, pass: string): string =>
   `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
 
@@ -26,6 +29,7 @@ const buildUnitTag = (formId: string, explicitUnitTag: string): string => {
   return `wpcf7-f${formId}-p0-o1`;
 };
 
+// ここでフォームの情報を指定します。
 const buildCf7Body = (formId: string, unitTag: string, payload: ContactPayload): URLSearchParams => {
   const params = new URLSearchParams();
   params.set("_wpcf7", formId);
@@ -38,6 +42,7 @@ const buildCf7Body = (formId: string, unitTag: string, payload: ContactPayload):
   return params;
 };
 
+// APIへの送信をオプションごとに試行する関数
 type AttemptRecord = {
   option: string;
   endpoint: string | null;
@@ -45,6 +50,7 @@ type AttemptRecord = {
   payload: unknown;
 };
 
+// 認証オプションやエンドポイントの組み合わせを試行して、最初に成功したものを返す関数
 const sendWithOptions = async (
   endpoints: string[],
   options: Array<{ label: string; headers: Record<string, string> }>,
@@ -86,6 +92,7 @@ const sendWithOptions = async (
   };
 };
 
+// Next.js API Route Handler
 export async function POST(request: NextRequest) {
   try {
     const payload = (await request.json()) as ContactPayload;

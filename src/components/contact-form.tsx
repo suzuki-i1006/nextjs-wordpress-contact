@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 
 type FormState = "idle" | "sending" | "success" | "error";
 
+// ContactForm コンポーネントは、ユーザーが名前、メールアドレス、件名、メッセージを入力して送信できるフォームを提供します。
 export default function ContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -12,12 +13,14 @@ export default function ContactForm() {
   const [status, setStatus] = useState<FormState>("idle");
   const [statusMessage, setStatusMessage] = useState("");
 
+  // フォームの送信を処理する関数
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
     setStatus("sending");
     setStatusMessage("");
 
+    // APIエンドポイントにフォームデータを送信するためのコード
     try {
       const response = await fetch("/api/contact", {
         method: "POST",
@@ -46,9 +49,7 @@ export default function ContactForm() {
     } catch (error) {
       setStatus("error");
       setStatusMessage(
-        error instanceof Error
-          ? error.message
-          : "Network error occurred.",
+        error instanceof Error ? error.message : "Network error occurred.",
       );
     }
   };
