@@ -1,0 +1,28 @@
+# BEGIN WordPress
+# "BEGIN WordPress" から "END WordPress" までのディレクティブ (行) は
+# 動的に生成され、WordPress フィルターによってのみ修正が可能です。
+# これらのマーカー間にあるディレクティブへのいかなる変更も上書きされてしまいます。
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /next_wordpress_test/
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /next_wordpress_test/index.php [L]
+</IfModule>
+
+# END WordPress
+
+
+# Basic認証はこの行より下側で設定している想定
+SetEnvIfExpr "tolower(%{REQUEST_URI}) =~ m#^/next_wordpress_test/wp-json/#" WPAPI_EXEMPT=1
+
+<IfModule mod_authz_core.c>
+  <RequireAny>
+    # wp-json 配下は Basic 認証をスキップ
+    Require env WPAPI_EXEMPT=1
+    # それ以外は従来どおり認証が必要
+    Require valid-user
+  </RequireAny>
+</IfModule>
