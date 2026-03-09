@@ -161,22 +161,22 @@ export async function POST(request: NextRequest) {
 
     const resolvedUnitTag = buildUnitTag(formId, cf7UnitTag);
     const params = buildCf7Body(formId, resolvedUnitTag, payload);
-    const multipart = new FormData();
-    for (const [key, value] of params.entries()) {
-      multipart.set(key, value);
-    }
+    const urlencodedOptions = options.map(({ label, headers }) => ({
+      label: `${label}_URLENCODED`,
+      headers: {
+        ...headers,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      },
+    }));
 
-    let attempt = await sendWithOptions(endpoints, options, multipart);
+    let attempt = await sendWithOptions(endpoints, urlencodedOptions, params.toString());
 
     if (attempt.response && attempt.response.status === 415) {
-      const urlencodedOptions = options.map(({ label, headers }) => ({
-        label: `${label}_URLENCODED`,
-        headers: {
-          ...headers,
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        },
-      }));
-      attempt = await sendWithOptions(endpoints, urlencodedOptions, params.toString());
+      const multipart = new FormData();
+      for (const [key, value] of params.entries()) {
+        multipart.set(key, value);
+      }
+      attempt = await sendWithOptions(endpoints, options, multipart);
     }
 
     if (
