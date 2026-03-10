@@ -3,6 +3,11 @@
 import { FormEvent, useEffect, useState } from "react";
 
 type FormState = "idle" | "sending" | "success" | "error";
+type ChoiceOption = "選択肢 1" | "選択肢 2" | "選択肢 3";
+
+const SELECT_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
+const CHECKBOX_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
+const RADIO_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
 
 // Google が挿入する grecaptcha オブジェクトの最小型定義
 type RecaptchaWindow = Window & {
@@ -68,11 +73,28 @@ export default function ContactForm() {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [url, setUrl] = useState("");
+  const [phone, setPhone] = useState("");
+  const [numberValue, setNumberValue] = useState("");
+  const [dateValue, setDateValue] = useState("");
+  const [selectValue, setSelectValue] = useState("");
+  const [checkboxValues, setCheckboxValues] = useState<string[]>([]);
+  const [radioValue, setRadioValue] = useState("");
+  const [accepted, setAccepted] = useState(false);
   // bot 判定用の honeypot 項目（通常ユーザーは空のまま）
   const [website, setWebsite] = useState("");
   // 送信状態とメッセージ表示用
   const [status, setStatus] = useState<FormState>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+
+  // チェックボックスの選択状態をトグル
+  const toggleCheckboxValue = (value: ChoiceOption) => {
+    setCheckboxValues((prev) =>
+      prev.includes(value)
+        ? prev.filter((item) => item !== value)
+        : [...prev, value],
+    );
+  };
 
   // 初回表示時に reCAPTCHA スクリプトを先読みし、送信時の待ち時間を減らす
   useEffect(() => {
@@ -110,6 +132,14 @@ export default function ContactForm() {
           email,
           subject,
           message,
+          url,
+          phone,
+          numberValue,
+          dateValue,
+          selectValue,
+          checkboxValues,
+          radioValue,
+          accepted,
           website,
           // サーバー側で Google 検証するために token/action を渡す
           recaptchaToken,
@@ -131,6 +161,14 @@ export default function ContactForm() {
       setEmail("");
       setSubject("");
       setMessage("");
+      setUrl("");
+      setPhone("");
+      setNumberValue("");
+      setDateValue("");
+      setSelectValue("");
+      setCheckboxValues([]);
+      setRadioValue("");
+      setAccepted(false);
       setWebsite("");
     } catch (error) {
       // ネットワークエラーや reCAPTCHA 取得失敗などの例外
@@ -157,7 +195,7 @@ export default function ContactForm() {
         className="hidden"
       />
       <label className="flex flex-col text-sm">
-        Name
+        氏名
         <input
           name="name"
           type="text"
@@ -168,7 +206,7 @@ export default function ContactForm() {
         />
       </label>
       <label className="flex flex-col text-sm">
-        Email
+        メールアドレス
         <input
           name="email"
           type="email"
@@ -179,26 +217,126 @@ export default function ContactForm() {
         />
       </label>
       <label className="flex flex-col text-sm">
-        Subject
+        題名
         <input
           name="subject"
           type="text"
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
           className="mt-1 rounded border border-zinc-300 px-3 py-2"
+          required
         />
       </label>
       <label className="flex flex-col text-sm">
-        Message
+        メッセージ本文（任意）
         <textarea
           name="message"
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           rows={6}
           className="mt-1 rounded border border-zinc-300 px-3 py-2"
-          required
         />
       </label>
+      <label className="flex flex-col text-sm">
+        リンク
+        <input
+          name="url"
+          type="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          className="mt-1 rounded border border-zinc-300 px-3 py-2"
+          placeholder="https://example.com"
+        />
+      </label>
+      <label className="flex flex-col text-sm">
+        電話番号
+        <input
+          name="phone"
+          type="tel"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          className="mt-1 rounded border border-zinc-300 px-3 py-2"
+        />
+      </label>
+      <label className="flex flex-col text-sm">
+        数値
+        <input
+          name="numberValue"
+          type="number"
+          value={numberValue}
+          onChange={(event) => setNumberValue(event.target.value)}
+          className="mt-1 rounded border border-zinc-300 px-3 py-2"
+        />
+      </label>
+      <label className="flex flex-col text-sm">
+        日付
+        <input
+          name="dateValue"
+          type="date"
+          value={dateValue}
+          onChange={(event) => setDateValue(event.target.value)}
+          className="mt-1 rounded border border-zinc-300 px-3 py-2"
+        />
+      </label>
+      <label className="flex flex-col text-sm">
+        ドロップダウン
+        <select
+          name="selectValue"
+          value={selectValue}
+          onChange={(event) => setSelectValue(event.target.value)}
+          className="mt-1 rounded border border-zinc-300 px-3 py-2"
+        >
+          <option value="">選択してください</option>
+          {SELECT_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <fieldset className="space-y-2 text-sm">
+        <legend className="font-medium">チェックボックス</legend>
+        {CHECKBOX_OPTIONS.map((option) => (
+          <label key={option} className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="checkboxValues"
+              value={option}
+              checked={checkboxValues.includes(option)}
+              onChange={() => toggleCheckboxValue(option)}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      <fieldset className="space-y-2 text-sm">
+        <legend className="font-medium">ラジオボタン</legend>
+        {RADIO_OPTIONS.map((option) => (
+          <label key={option} className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="radioValue"
+              value={option}
+              checked={radioValue === option}
+              onChange={(event) => setRadioValue(event.target.value)}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="accepted"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+        />
+        <span>プライバシーポリシーに同意して下さい。</span>
+      </label>
+
       <button
         type="submit"
         disabled={isSending}

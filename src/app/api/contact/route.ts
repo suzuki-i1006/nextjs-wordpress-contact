@@ -9,6 +9,14 @@ type ContactPayload = {
   email?: unknown;
   subject?: unknown;
   message?: unknown;
+  url?: unknown;
+  phone?: unknown;
+  numberValue?: unknown;
+  dateValue?: unknown;
+  selectValue?: unknown;
+  checkboxValues?: unknown;
+  radioValue?: unknown;
+  accepted?: unknown;
   website?: unknown; // honeypot
   recaptchaToken?: unknown;
   recaptchaAction?: unknown;
@@ -20,6 +28,14 @@ type ValidContactPayload = {
   email: string;
   subject: string;
   message: string;
+  url: string;
+  phone: string;
+  numberValue: string;
+  dateValue: string;
+  selectValue: string;
+  checkboxValues: string[];
+  radioValue: string;
+  accepted: boolean;
 };
 
 // WordPress 送信試行の結果
@@ -37,6 +53,13 @@ type RecaptchaVerifyPayload = {
   action?: string;
   hostname?: string;
   "error-codes"?: string[];
+};
+
+// CF7 バリデーション失敗時の項目情報（必要最小限）
+type Cf7InvalidField = {
+  into?: unknown;
+  name?: unknown;
+  message?: unknown;
 };
 
 // IP ごとのレート制限カウンタ
@@ -94,6 +117,15 @@ const MAX_NAME_LENGTH = 100;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_MESSAGE_LENGTH = 5000;
+const MAX_URL_LENGTH = 2048;
+const MAX_PHONE_LENGTH = 50;
+const MAX_NUMBER_LENGTH = 50;
+const MAX_DATE_LENGTH = 50;
+const MAX_SELECT_LENGTH = 100;
+const MAX_RADIO_LENGTH = 100;
+const MAX_CHECKBOX_COUNT = 10;
+const MAX_CHECKBOX_ITEM_LENGTH = 100;
+const CF7_ACCEPTANCE_FIELD = "acceptance-643";
 
 const EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
@@ -173,6 +205,18 @@ const buildCf7Body = (
   params.set("your-email", payload.email);
   params.set("your-subject", payload.subject);
   params.set("your-message", payload.message);
+  params.set("url-25", payload.url);
+  params.set("tel-868", payload.phone);
+  params.set("number-833", payload.numberValue);
+  params.set("date-537", payload.dateValue);
+  params.set("select-946", payload.selectValue);
+  if (payload.checkboxValues.length > 0) {
+    for (const item of payload.checkboxValues) {
+      params.append("checkbox-148", item);
+    }
+  }
+  params.set("radio-203", payload.radioValue);
+  params.set(CF7_ACCEPTANCE_FIELD, payload.accepted ? "1" : "");
   return params;
 };
 
@@ -260,6 +304,64 @@ function hasDangerousControlChars(value: string): boolean {
   return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value);
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeField(item))
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === "string") {
+    const normalized = normalizeField(value);
+    return normalized ? [normalized] : [];
+  }
+  return [];
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "on";
+  }
+  if (typeof value === "number") return value === 1;
+  return false;
+}
+
+function isAcceptanceInvalid(invalidFields: unknown): boolean {
+  if (!Array.isArray(invalidFields)) return false;
+  return invalidFields.some((field) => {
+    if (!field || typeof field !== "object") return false;
+    const record = field as Cf7InvalidField;
+    const into = typeof record.into === "string" ? record.into : "";
+    const name = typeof record.name === "string" ? record.name : "";
+    return into.includes(CF7_ACCEPTANCE_FIELD) || name === CF7_ACCEPTANCE_FIELD;
+  });
+}
+
+function resolveCf7FailureMessage(result: Record<string, unknown> | null): string {
+  if (!result || typeof result !== "object") {
+    return "メール送信に失敗しました。";
+  }
+
+  const status = typeof result.status === "string" ? result.status : "";
+  const message = typeof result.message === "string" ? result.message : "";
+  const invalidFields = result.invalid_fields;
+
+  // 同意チェック未選択時のメッセージを明示する
+  if (status === "validation_failed" && isAcceptanceInvalid(invalidFields)) {
+    return "プライバシーポリシーに同意してください。";
+  }
+
+  // CF7 が返すメッセージがあれば優先して返す
+  if (message) return message;
+
+  if (status === "validation_failed") {
+    return "入力内容に不備があります。";
+  }
+
+  return "メール送信に失敗しました。";
+}
+
 // 必須/形式/長さ/禁止文字をまとめて検証
 function validatePayload(raw: ContactPayload): {
   ok: true;
@@ -271,12 +373,20 @@ function validatePayload(raw: ContactPayload): {
   const name = normalizeField(raw.name);
   const email = normalizeField(raw.email).toLowerCase();
   const subject = normalizeField(raw.subject);
-  const message = normalizeField(raw.message);
+  const message = normalizeField(raw.message || "");
+  const url = normalizeField(raw.url || "");
+  const phone = normalizeField(raw.phone || "");
+  const numberValue = normalizeField(raw.numberValue || "");
+  const dateValue = normalizeField(raw.dateValue || "");
+  const selectValue = normalizeField(raw.selectValue || "");
+  const checkboxValues = normalizeStringArray(raw.checkboxValues);
+  const radioValue = normalizeField(raw.radioValue || "");
+  const accepted = normalizeBoolean(raw.accepted);
 
-  if (!name || !email || !message) {
+  if (!name || !email || !subject) {
     return {
       ok: false,
-      message: "お名前、メールアドレス、メッセージは必須です。",
+      message: "お名前、メールアドレス、題名は必須です。",
     };
   }
 
@@ -284,11 +394,28 @@ function validatePayload(raw: ContactPayload): {
     return { ok: false, message: "メールアドレスの形式が不正です。" };
   }
 
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { ok: false, message: "リンクは http/https のURLを入力してください。" };
+      }
+    } catch {
+      return { ok: false, message: "リンクの形式が不正です。" };
+    }
+  }
+
   if (
     name.length > MAX_NAME_LENGTH ||
     email.length > MAX_EMAIL_LENGTH ||
     subject.length > MAX_SUBJECT_LENGTH ||
-    message.length > MAX_MESSAGE_LENGTH
+    message.length > MAX_MESSAGE_LENGTH ||
+    url.length > MAX_URL_LENGTH ||
+    phone.length > MAX_PHONE_LENGTH ||
+    numberValue.length > MAX_NUMBER_LENGTH ||
+    dateValue.length > MAX_DATE_LENGTH ||
+    selectValue.length > MAX_SELECT_LENGTH ||
+    radioValue.length > MAX_RADIO_LENGTH
   ) {
     return {
       ok: false,
@@ -300,9 +427,24 @@ function validatePayload(raw: ContactPayload): {
     hasDangerousControlChars(name) ||
     hasDangerousControlChars(email) ||
     hasDangerousControlChars(subject) ||
-    hasDangerousControlChars(message)
+    hasDangerousControlChars(message) ||
+    hasDangerousControlChars(url) ||
+    hasDangerousControlChars(phone) ||
+    hasDangerousControlChars(numberValue) ||
+    hasDangerousControlChars(dateValue) ||
+    hasDangerousControlChars(selectValue) ||
+    hasDangerousControlChars(radioValue)
   ) {
     return { ok: false, message: "入力に使用できない文字が含まれています。" };
+  }
+
+  if (checkboxValues.length > MAX_CHECKBOX_COUNT) {
+    return { ok: false, message: "チェックボックスの選択数が多すぎます。" };
+  }
+  for (const item of checkboxValues) {
+    if (item.length > MAX_CHECKBOX_ITEM_LENGTH || hasDangerousControlChars(item)) {
+      return { ok: false, message: "チェックボックスの入力が不正です。" };
+    }
   }
 
   return {
@@ -312,6 +454,14 @@ function validatePayload(raw: ContactPayload): {
       email,
       subject,
       message,
+      url,
+      phone,
+      numberValue,
+      dateValue,
+      selectValue,
+      checkboxValues,
+      radioValue,
+      accepted,
     },
   };
 }
@@ -775,11 +925,12 @@ export async function POST(request: NextRequest) {
       String(result.status) === "mail_sent";
 
     if (!isSent) {
+      const failureMessage = resolveCf7FailureMessage(result);
       return NextResponse.json(
         withDebug(
           {
             success: false,
-            message: "メール送信に失敗しました。",
+            message: failureMessage,
           },
           {
             endpoint,
