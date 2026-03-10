@@ -1,6 +1,7 @@
 # Next.js から WordPress Contact Form 7 を API 利用するマニュアル
 
 このドキュメントは、Next.js のフォーム送信を WordPress の Contact Form 7（以下 CF7）に転送し、管理者通知メールと自動返信メールを送れる状態を目指します。
+
 テンプレートとしているので「Use this template」からご利用ください。
 
 ## 1. 全体像
@@ -66,8 +67,11 @@ CF7 一覧画面で対象フォームの ID を確認します。
 例: `6`
 
 https://yohakutest.com/next_wordpress_test/wp-json/contact-form-7/v1/contact-forms/
+
 上記URLをAPIでGET実行
+
 CF7のフォーム一覧が取得できます。
+
 認証情報はBasic Authとしてユーザーとアプリケーションパスワードを使用して下さい。
 
 この値を後で `CF7_FORM_ID` に設定します。
