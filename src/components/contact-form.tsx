@@ -108,6 +108,13 @@ export default function ContactForm() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
+    // 同意未チェックなら送信せず、理由を即時表示する
+    if (!accepted) {
+      setStatus("error");
+      setStatusMessage("プライバシーポリシーに同意してください。");
+      return;
+    }
+
     // 送信開始時に状態を初期化
     setStatus("sending");
     setStatusMessage("");
