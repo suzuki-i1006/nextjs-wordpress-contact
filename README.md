@@ -94,12 +94,18 @@ CF7 の「メール」タブで通常の通知メールを設定します。
 
 CF7 の「メール (2)」を有効化してください。
 
+### 4-6. Google reCAPTCHA v3 のキー発行
+
+1. Google reCAPTCHA 管理画面で `v3` のサイトキー/シークレットキーを発行
+2. ドメインに本番ドメインと `localhost` を追加
+3. 発行したキーを `.env.local` に設定
+
 ## 5. Next.js 側の環境変数設定
 
 `src/.env.local` を作成して、次を設定します。
 
 ```env
-NEXT_PUBLIC_WORDPRESS_API_URL=https://your-site.com/wp-json
+WORDPRESS_API_URL=https://your-site.com/wp-json
 CF7_FORM_ID=6
 
 WORDPRESS_API_USER=admin
@@ -111,14 +117,31 @@ WORDPRESS_BASIC_AUTH_PASS=
 
 # 必要時のみ（通常は空でOK）
 CF7_UNIT_TAG=
+
+# セキュリティ設定
+CONTACT_ALLOWED_ORIGINS=http://localhost:3000
+CONTACT_RATE_LIMIT_WINDOW_MS=60000
+CONTACT_RATE_LIMIT_MAX=5
+CONTACT_MAX_BODY_BYTES=16384
+CONTACT_UPSTREAM_TIMEOUT_MS=10000
+WORDPRESS_REQUIRE_AUTH=0
 WORDPRESS_ALLOW_NOAUTH_RETRY=0
+CONTACT_DEBUG=0
+
+# reCAPTCHA v3 設定
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=
+RECAPTCHA_SECRET_KEY=
+RECAPTCHA_REQUIRED=1
+RECAPTCHA_MIN_SCORE=0.5
+RECAPTCHA_TIMEOUT_MS=8000
 ```
 
 各変数の意味:
 
-1. `NEXT_PUBLIC_WORDPRESS_API_URL`
+1. `WORDPRESS_API_URL`
    - WordPress API のベース URL
    - `/wp-json` または `/wp-json/wp/v2` どちらでも可（コード側で正規化）
+   - 互換のため `NEXT_PUBLIC_WORDPRESS_API_URL` も読めますが、本番では `WORDPRESS_API_URL` を推奨
 2. `CF7_FORM_ID`
    - 送信先フォームの ID
 3. `WORDPRESS_API_USER` / `WORDPRESS_API_PASS`
@@ -128,7 +151,29 @@ WORDPRESS_ALLOW_NOAUTH_RETRY=0
 5. `CF7_UNIT_TAG`
    - 通常は未設定で可。必要な場合だけ明示
 6. `WORDPRESS_ALLOW_NOAUTH_RETRY`
-   - `1` のとき、401 後に認証なしで再試行
+   - 開発時のみ `1` 推奨。401 後に認証なしで再試行
+7. `CONTACT_ALLOWED_ORIGINS`
+   - 送信を許可する Origin（カンマ区切り）
+8. `CONTACT_RATE_LIMIT_WINDOW_MS` / `CONTACT_RATE_LIMIT_MAX`
+   - API のレート制限設定
+9. `CONTACT_MAX_BODY_BYTES`
+   - 受信ボディ上限
+10. `CONTACT_UPSTREAM_TIMEOUT_MS`
+   - WordPress API へのタイムアウト
+11. `WORDPRESS_REQUIRE_AUTH`
+   - `1` の場合、認証未設定だと送信を拒否
+12. `CONTACT_DEBUG`
+   - `0` 推奨。本番で詳細エラーを返さない
+13. `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`
+   - フロントエンドでトークンを発行するための公開キー
+14. `RECAPTCHA_SECRET_KEY`
+   - サーバー側で Google 検証に使う秘密鍵
+15. `RECAPTCHA_REQUIRED`
+   - `1` で reCAPTCHA 必須（推奨）
+16. `RECAPTCHA_MIN_SCORE`
+   - v3 スコアの許容下限（例: `0.5`）
+17. `RECAPTCHA_TIMEOUT_MS`
+   - Google 検証 API タイムアウト
 
 ## 6. ローカル起動手順
 
@@ -155,10 +200,12 @@ docker compose ps
 
 `src/app/api/contact/route.ts` の主な役割:
 
-1. 受信 JSON の必須チェック
-   - `name`, `email`, `message` が必須
-2. WordPress URL の正規化
-3. CF7 用パラメータへ変換
+1. Origin チェックとレート制限
+2. 受信 JSON のサイズ/形式/内容チェック
+3. honeypot（`website`）で bot 送信を除外
+4. reCAPTCHA トークンを Google API で検証
+5. WordPress URL の正規化
+6. CF7 用パラメータへ変換
    - `_wpcf7`
    - `_wpcf7_unit_tag`
    - `_wpcf7_container_post`
@@ -166,15 +213,17 @@ docker compose ps
    - `your-email`
    - `your-subject`
    - `your-message`
-4. エンドポイント呼び分け
+7. エンドポイント呼び分け
    - `/feedback`
    - `/feedback/`
-5. 認証方式の優先順で試行
+8. 認証方式の優先順で試行
    - `WORDPRESS_API_USER`
    - `WORDPRESS_BASIC_AUTH`
    - `NO_AUTH`
-6. 415 のとき `multipart/form-data` で再送
-7. CF7 応答が `status: mail_sent` なら成功
+9. 415 のとき `multipart/form-data` で再送
+10. タイムアウト付きで WordPress API 呼び出し
+11. 本番では詳細エラーを抑制
+12. CF7 応答が `status: mail_sent` なら成功
 
 ## 8. まず行う疎通テスト
 
@@ -220,5 +269,8 @@ curl.exe -X POST ^
 3. 自動返信メール（メール 2）が届くこと
 4. フォーム必須項目チェックが機能すること
 5. 失敗時のメッセージがユーザーに分かること
+6. `CONTACT_ALLOWED_ORIGINS` と `CONTACT_DEBUG=0` を本番値にすること
+7. `WORDPRESS_REQUIRE_AUTH=1` を必要に応じて有効化すること
+8. `RECAPTCHA_REQUIRED=1` と `RECAPTCHA_SECRET_KEY` を本番値にすること
 
 ---
