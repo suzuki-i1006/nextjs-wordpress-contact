@@ -181,18 +181,7 @@ RECAPTCHA_TIMEOUT_MS=8000
 
 ## 6. ローカル起動手順
 
-### 6-1. Node で直接起動
-
-```powershell
-cd src
-node -v
-npm ci
-npm run dev
-```
-
 Node バージョンは `20.9.0` 以上が必要です。
-
-### 6-2. Docker で起動
 
 ```powershell
 docker compose build --no-cache app
