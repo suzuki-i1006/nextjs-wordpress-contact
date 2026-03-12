@@ -105,6 +105,18 @@ export default function ContactForm() {
     });
   }, [recaptchaSiteKey]);
 
+  // 送信成功メッセージは3秒後に自動で消す
+  useEffect(() => {
+    if (status !== "success" || !statusMessage) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setStatusMessage("");
+      setStatus("idle");
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [status, statusMessage]);
+
   const closeConfirmModal = () => {
     if (status === "sending") return;
     setIsConfirmOpen(false);
@@ -112,6 +124,8 @@ export default function ContactForm() {
 
   // モーダル上の「送信する」押下時のみ、実際のAPI送信を実行する
   const handleConfirmSend = async () => {
+    if (status === "sending") return;
+
     if (!accepted) {
       setStatus("error");
       setStatusMessage("プライバシーポリシーに同意してください。");
@@ -192,6 +206,7 @@ export default function ContactForm() {
   // フォーム送信ハンドラ（ここでは確認モーダルを開くのみ）
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
+    if (status === "sending") return;
 
     // 同意未チェックならモーダルを開かずに理由を即時表示する
     if (!accepted) {
@@ -209,180 +224,182 @@ export default function ContactForm() {
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-      {/* bot が埋めやすい隠し項目（埋まっていたらサーバー側で破棄） */}
-      <input
-        name="website"
-        type="text"
-        value={website}
-        onChange={(event) => setWebsite(event.target.value)}
-        tabIndex={-1}
-        autoComplete="off"
-        aria-hidden="true"
-        className="hidden"
-      />
-      <label className="flex flex-col text-sm">
-        氏名
-        <input
-          name="name"
-          type="text"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-          required
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        メールアドレス
-        <input
-          name="email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-          required
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        題名
-        <input
-          name="subject"
-          type="text"
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-          required
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        メッセージ本文（任意）
-        <textarea
-          name="message"
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          rows={6}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        リンク
-        <input
-          name="url"
-          type="url"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-          placeholder="https://example.com"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        電話番号
-        <input
-          name="phone"
-          type="tel"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        数値
-        <input
-          name="numberValue"
-          type="number"
-          value={numberValue}
-          onChange={(event) => setNumberValue(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        日付
-        <input
-          name="dateValue"
-          type="date"
-          value={dateValue}
-          onChange={(event) => setDateValue(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        ドロップダウン
-        <select
-          name="selectValue"
-          value={selectValue}
-          onChange={(event) => setSelectValue(event.target.value)}
-          className="mt-1 rounded border border-zinc-300 px-3 py-2"
-        >
-          <option value="">選択してください</option>
-          {SELECT_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      </label>
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4" aria-busy={isSending}>
+        <fieldset disabled={isSending} className="space-y-4">
+          {/* bot が埋めやすい隠し項目（埋まっていたらサーバー側で破棄） */}
+          <input
+            name="website"
+            type="text"
+            value={website}
+            onChange={(event) => setWebsite(event.target.value)}
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="hidden"
+          />
+          <label className="flex flex-col text-sm">
+            氏名
+            <input
+              name="name"
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              required
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            メールアドレス
+            <input
+              name="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              required
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            題名
+            <input
+              name="subject"
+              type="text"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              required
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            メッセージ本文（任意）
+            <textarea
+              name="message"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              rows={6}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            リンク
+            <input
+              name="url"
+              type="url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              placeholder="https://example.com"
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            電話番号
+            <input
+              name="phone"
+              type="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            数値
+            <input
+              name="numberValue"
+              type="number"
+              value={numberValue}
+              onChange={(event) => setNumberValue(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            日付
+            <input
+              name="dateValue"
+              type="date"
+              value={dateValue}
+              onChange={(event) => setDateValue(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col text-sm">
+            ドロップダウン
+            <select
+              name="selectValue"
+              value={selectValue}
+              onChange={(event) => setSelectValue(event.target.value)}
+              className="mt-1 rounded border border-zinc-300 px-3 py-2"
+            >
+              <option value="">選択してください</option>
+              {SELECT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <fieldset className="space-y-2 text-sm">
-        <legend className="font-medium">チェックボックス</legend>
-        {CHECKBOX_OPTIONS.map((option) => (
-          <label key={option} className="flex items-center gap-2">
+          <fieldset className="space-y-2 text-sm">
+            <legend className="font-medium">チェックボックス</legend>
+            {CHECKBOX_OPTIONS.map((option) => (
+              <label key={option} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="checkboxValues"
+                  value={option}
+                  checked={checkboxValues.includes(option)}
+                  onChange={() => toggleCheckboxValue(option)}
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          <fieldset className="space-y-2 text-sm">
+            <legend className="font-medium">ラジオボタン</legend>
+            {RADIO_OPTIONS.map((option) => (
+              <label key={option} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="radioValue"
+                  value={option}
+                  checked={radioValue === option}
+                  onChange={(event) => setRadioValue(event.target.value)}
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              name="checkboxValues"
-              value={option}
-              checked={checkboxValues.includes(option)}
-              onChange={() => toggleCheckboxValue(option)}
+              name="accepted"
+              checked={accepted}
+              onChange={(event) => setAccepted(event.target.checked)}
             />
-            <span>{option}</span>
+            <span>プライバシーポリシーに同意して下さい。</span>
           </label>
-        ))}
-      </fieldset>
 
-      <fieldset className="space-y-2 text-sm">
-        <legend className="font-medium">ラジオボタン</legend>
-        {RADIO_OPTIONS.map((option) => (
-          <label key={option} className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="radioValue"
-              value={option}
-              checked={radioValue === option}
-              onChange={(event) => setRadioValue(event.target.value)}
-            />
-            <span>{option}</span>
-          </label>
-        ))}
-      </fieldset>
-
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          name="accepted"
-          checked={accepted}
-          onChange={(event) => setAccepted(event.target.checked)}
-        />
-        <span>プライバシーポリシーに同意して下さい。</span>
-      </label>
-
-        <button
-          type="submit"
-          disabled={isSending}
-          className="rounded bg-black px-5 py-2 text-white disabled:opacity-50"
-        >
-          {isSending ? "Sending..." : "内容を確認する"}
-        </button>
-
-        {statusMessage ? (
-          <p
-            className={
-              status === "success"
-                ? "text-sm text-green-700"
-                : "text-sm text-red-700"
-            }
+          <button
+            type="submit"
+            disabled={isSending}
+            className="rounded bg-black px-5 py-2 text-white disabled:opacity-50"
           >
-            {statusMessage}
-          </p>
-        ) : null}
+            {isSending ? "送信中..." : "内容を確認する"}
+          </button>
+
+          {statusMessage ? (
+            <p
+              className={
+                status === "success"
+                  ? "text-sm text-green-700"
+                  : "text-sm text-red-700"
+              }
+            >
+              {statusMessage}
+            </p>
+          ) : null}
+        </fieldset>
       </form>
 
       {isConfirmOpen ? (
@@ -444,7 +461,8 @@ export default function ContactForm() {
               <button
                 type="button"
                 onClick={closeConfirmModal}
-                className="rounded border border-zinc-300 px-4 py-2 text-sm"
+                disabled={isSending}
+                className="rounded border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50"
               >
                 戻る
               </button>
@@ -454,9 +472,24 @@ export default function ContactForm() {
                 disabled={isSending}
                 className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
               >
-                {isSending ? "Sending..." : "送信する"}
+                {isSending ? "送信中..." : "送信する"}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isSending ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div
+            role="status"
+            aria-live="polite"
+            className="w-full max-w-sm rounded bg-white p-6 text-center shadow-xl"
+          >
+            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-zinc-300 border-t-black" />
+            <p className="mt-4 text-sm font-medium text-zinc-800">
+              送信中です。しばらくお待ちください。
+            </p>
           </div>
         </div>
       ) : null}
