@@ -75,11 +75,14 @@ const RATE_LIMIT_WINDOW_MS = clampNumber(
   10 * 60 * 1000,
   60_000,
 );
+// 開発時は検証しやすいように上限を緩める（本番は従来どおり 5 件/分）
+const RATE_LIMIT_MAX_DEFAULT =
+  process.env.NODE_ENV === "production" ? "5" : "100";
 const RATE_LIMIT_MAX = clampNumber(
-  Number(process.env.CONTACT_RATE_LIMIT_MAX || "5"),
+  Number(process.env.CONTACT_RATE_LIMIT_MAX || RATE_LIMIT_MAX_DEFAULT),
   1,
   100,
-  5,
+  Number(RATE_LIMIT_MAX_DEFAULT),
 );
 const MAX_BODY_SIZE_BYTES = clampNumber(
   Number(process.env.CONTACT_MAX_BODY_BYTES || "16384"),
@@ -126,6 +129,24 @@ const MAX_RADIO_LENGTH = 100;
 const MAX_CHECKBOX_COUNT = 10;
 const MAX_CHECKBOX_ITEM_LENGTH = 100;
 const CF7_ACCEPTANCE_FIELD = "acceptance-643";
+const CF7_SELECT_FIELD = "select-946";
+const CF7_CHECKBOX_FIELD = "checkbox-148";
+const CF7_RADIO_FIELD = "radio-203";
+
+const CF7_FIELD_LABELS: Record<string, string> = {
+  "your-name": "氏名",
+  "your-email": "メールアドレス",
+  "your-subject": "題名",
+  "your-message": "メッセージ本文",
+  "url-25": "リンク",
+  "tel-868": "電話番号",
+  "number-833": "数値",
+  "date-537": "日付",
+  [CF7_SELECT_FIELD]: "ドロップダウン",
+  [CF7_CHECKBOX_FIELD]: "チェックボックス",
+  [CF7_RADIO_FIELD]: "ラジオボタン",
+  [CF7_ACCEPTANCE_FIELD]: "プライバシーポリシー同意",
+};
 
 const EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
@@ -197,6 +218,10 @@ const buildCf7Body = (
   unitTag: string,
   payload: ValidContactPayload,
 ): URLSearchParams => {
+  const setOptionalParam = (params: URLSearchParams, key: string, value: string) => {
+    if (value) params.set(key, value);
+  };
+
   const params = new URLSearchParams();
   params.set("_wpcf7", formId);
   params.set("_wpcf7_unit_tag", unitTag);
@@ -204,19 +229,22 @@ const buildCf7Body = (
   params.set("your-name", payload.name);
   params.set("your-email", payload.email);
   params.set("your-subject", payload.subject);
-  params.set("your-message", payload.message);
-  params.set("url-25", payload.url);
-  params.set("tel-868", payload.phone);
-  params.set("number-833", payload.numberValue);
-  params.set("date-537", payload.dateValue);
-  params.set("select-946", payload.selectValue);
+  setOptionalParam(params, "your-message", payload.message);
+  setOptionalParam(params, "url-25", payload.url);
+  setOptionalParam(params, "tel-868", payload.phone);
+  setOptionalParam(params, "number-833", payload.numberValue);
+  setOptionalParam(params, "date-537", payload.dateValue);
+  setOptionalParam(params, CF7_SELECT_FIELD, payload.selectValue);
   if (payload.checkboxValues.length > 0) {
     for (const item of payload.checkboxValues) {
-      params.append("checkbox-148", item);
+      params.append(CF7_CHECKBOX_FIELD, item);
     }
   }
-  params.set("radio-203", payload.radioValue);
-  params.set(CF7_ACCEPTANCE_FIELD, payload.accepted ? "1" : "");
+  // 単一選択は任意入力として扱うため、未選択時は送信しない
+  setOptionalParam(params, CF7_RADIO_FIELD, payload.radioValue);
+  if (payload.accepted) {
+    params.set(CF7_ACCEPTANCE_FIELD, "1");
+  }
   return params;
 };
 
@@ -338,18 +366,99 @@ function isAcceptanceInvalid(invalidFields: unknown): boolean {
   });
 }
 
-function resolveCf7FailureMessage(result: Record<string, unknown> | null): string {
+function extractInvalidFieldKeys(invalidFields: unknown): string[] {
+  if (!Array.isArray(invalidFields)) return [];
+
+  const keys = new Set<string>();
+  for (const field of invalidFields) {
+    if (!field || typeof field !== "object") continue;
+    const record = field as Cf7InvalidField;
+    const name = typeof record.name === "string" ? record.name : "";
+    const into = typeof record.into === "string" ? record.into : "";
+
+    if (name) {
+      keys.add(name);
+    }
+
+    // CF7 の into には data-name や class 名として field key が入ることがある
+    const dataNameMatch = into.match(/data-name=["']([^"']+)["']/);
+    if (dataNameMatch?.[1]) {
+      keys.add(dataNameMatch[1]);
+    }
+    const wrapClassMatch = into.match(/wpcf7-form-control-wrap(?:\.|\s)([a-zA-Z0-9_-]+)/);
+    if (wrapClassMatch?.[1]) {
+      keys.add(wrapClassMatch[1]);
+    }
+
+    for (const key of Object.keys(CF7_FIELD_LABELS)) {
+      if (into.includes(key)) {
+        keys.add(key);
+      }
+    }
+  }
+
+  return [...keys];
+}
+
+function extractInvalidFieldMessages(invalidFields: unknown): string[] {
+  if (!Array.isArray(invalidFields)) return [];
+
+  const messages = new Set<string>();
+  for (const field of invalidFields) {
+    if (!field || typeof field !== "object") continue;
+    const record = field as Cf7InvalidField;
+    const message = typeof record.message === "string" ? record.message.trim() : "";
+    if (message) {
+      messages.add(message);
+    }
+  }
+
+  return [...messages];
+}
+
+function toFieldLabel(key: string): string {
+  return CF7_FIELD_LABELS[key] || key;
+}
+
+function resolveCf7FailureMessage(
+  result: Record<string, unknown> | null,
+  payload: ValidContactPayload,
+): string {
   if (!result || typeof result !== "object") {
     return "メール送信に失敗しました。";
   }
 
   const status = typeof result.status === "string" ? result.status : "";
   const message = typeof result.message === "string" ? result.message : "";
-  const invalidFields = result.invalid_fields;
+  // CF7 バージョン差異で key が変わるケースに対応
+  const invalidFields = result.invalid_fields ?? result.invalidFields;
 
   // 同意チェック未選択時のメッセージを明示する
   if (status === "validation_failed" && isAcceptanceInvalid(invalidFields)) {
     return "プライバシーポリシーに同意してください。";
+  }
+
+  if (status === "validation_failed") {
+    const invalidKeys = extractInvalidFieldKeys(invalidFields);
+    if (invalidKeys.includes(CF7_RADIO_FIELD)) {
+      return "ラジオボタンを選択してください。";
+    }
+    if (invalidKeys.length > 0) {
+      const labels = invalidKeys.map(toFieldLabel).join("、");
+      return `入力内容に不備があります（${labels}）。`;
+    }
+
+    const invalidMessages = extractInvalidFieldMessages(invalidFields);
+    if (
+      invalidMessages.length === 1 &&
+      invalidMessages[0] === "入力してください。" &&
+      !payload.radioValue
+    ) {
+      return "ラジオボタンを選択してください。";
+    }
+    if (invalidMessages.length > 0) {
+      return `入力内容に不備があります（${invalidMessages.join(" / ")}）。`;
+    }
   }
 
   // CF7 が返すメッセージがあれば優先して返す
@@ -925,7 +1034,7 @@ export async function POST(request: NextRequest) {
       String(result.status) === "mail_sent";
 
     if (!isSent) {
-      const failureMessage = resolveCf7FailureMessage(result);
+      const failureMessage = resolveCf7FailureMessage(result, payload);
       return NextResponse.json(
         withDebug(
           {

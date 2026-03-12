@@ -86,6 +86,7 @@ export default function ContactForm() {
   // 送信状態とメッセージ表示用
   const [status, setStatus] = useState<FormState>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // チェックボックスの選択状態をトグル
   const toggleCheckboxValue = (value: ChoiceOption) => {
@@ -104,18 +105,20 @@ export default function ContactForm() {
     });
   }, [recaptchaSiteKey]);
 
-  // フォーム送信ハンドラ
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const closeConfirmModal = () => {
+    if (status === "sending") return;
+    setIsConfirmOpen(false);
+  };
 
-    // 同意未チェックなら送信せず、理由を即時表示する
+  // モーダル上の「送信する」押下時のみ、実際のAPI送信を実行する
+  const handleConfirmSend = async () => {
     if (!accepted) {
       setStatus("error");
       setStatusMessage("プライバシーポリシーに同意してください。");
       return;
     }
 
-    // 送信開始時に状態を初期化
+    setIsConfirmOpen(false);
     setStatus("sending");
     setStatusMessage("");
 
@@ -186,10 +189,27 @@ export default function ContactForm() {
     }
   };
 
+  // フォーム送信ハンドラ（ここでは確認モーダルを開くのみ）
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+
+    // 同意未チェックならモーダルを開かずに理由を即時表示する
+    if (!accepted) {
+      setStatus("error");
+      setStatusMessage("プライバシーポリシーに同意してください。");
+      return;
+    }
+
+    setStatus("idle");
+    setStatusMessage("");
+    setIsConfirmOpen(true);
+  };
+
   const isSending = status === "sending";
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+    <>
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
       {/* bot が埋めやすい隠し項目（埋まっていたらサーバー側で破棄） */}
       <input
         name="website"
@@ -344,25 +364,102 @@ export default function ContactForm() {
         <span>プライバシーポリシーに同意して下さい。</span>
       </label>
 
-      <button
-        type="submit"
-        disabled={isSending}
-        className="rounded bg-black px-5 py-2 text-white disabled:opacity-50"
-      >
-        {isSending ? "Sending..." : "Send"}
-      </button>
-
-      {statusMessage ? (
-        <p
-          className={
-            status === "success"
-              ? "text-sm text-green-700"
-              : "text-sm text-red-700"
-          }
+        <button
+          type="submit"
+          disabled={isSending}
+          className="rounded bg-black px-5 py-2 text-white disabled:opacity-50"
         >
-          {statusMessage}
-        </p>
+          {isSending ? "Sending..." : "内容を確認する"}
+        </button>
+
+        {statusMessage ? (
+          <p
+            className={
+              status === "success"
+                ? "text-sm text-green-700"
+                : "text-sm text-red-700"
+            }
+          >
+            {statusMessage}
+          </p>
+        ) : null}
+      </form>
+
+      {isConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
+            className="w-full max-w-2xl rounded bg-white p-5 shadow-xl"
+          >
+            <h2 id="confirm-modal-title" className="text-lg font-semibold">
+              送信内容の確認
+            </h2>
+            <div className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto rounded border border-zinc-200 p-3 text-sm">
+              <p>
+                <span className="font-medium">氏名:</span> {name || "-"}
+              </p>
+              <p>
+                <span className="font-medium">メールアドレス:</span>{" "}
+                {email || "-"}
+              </p>
+              <p>
+                <span className="font-medium">題名:</span> {subject || "-"}
+              </p>
+              <p>
+                <span className="font-medium">メッセージ本文:</span>{" "}
+                {message || "-"}
+              </p>
+              <p>
+                <span className="font-medium">リンク:</span> {url || "-"}
+              </p>
+              <p>
+                <span className="font-medium">電話番号:</span> {phone || "-"}
+              </p>
+              <p>
+                <span className="font-medium">数値:</span> {numberValue || "-"}
+              </p>
+              <p>
+                <span className="font-medium">日付:</span> {dateValue || "-"}
+              </p>
+              <p>
+                <span className="font-medium">ドロップダウン:</span>{" "}
+                {selectValue || "-"}
+              </p>
+              <p>
+                <span className="font-medium">チェックボックス:</span>{" "}
+                {checkboxValues.length > 0 ? checkboxValues.join(" / ") : "-"}
+              </p>
+              <p>
+                <span className="font-medium">ラジオボタン:</span>{" "}
+                {radioValue || "-"}
+              </p>
+              <p>
+                <span className="font-medium">同意:</span>{" "}
+                {accepted ? "同意済み" : "未同意"}
+              </p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirmModal}
+                className="rounded border border-zinc-300 px-4 py-2 text-sm"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSend}
+                disabled={isSending}
+                className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {isSending ? "Sending..." : "送信する"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
-    </form>
+    </>
   );
 }
