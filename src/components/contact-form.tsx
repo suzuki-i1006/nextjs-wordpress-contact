@@ -1,16 +1,28 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type FormState = "idle" | "sending" | "success" | "error";
 type ChoiceOption = "選択肢 1" | "選択肢 2" | "選択肢 3";
+type ValidatedFieldKey = "name" | "email" | "subject" | "url" | "accepted";
+type FocusFieldKey = ValidatedFieldKey | "radio";
+type FieldErrors = Partial<Record<ValidatedFieldKey, string>>;
 
 const SELECT_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
 const CHECKBOX_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
 const RADIO_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
+const VALIDATED_FIELDS: ValidatedFieldKey[] = [
+  "name",
+  "email",
+  "subject",
+  "url",
+  "accepted",
+];
 const SUCCESS_MESSAGE_AUTO_HIDE_MS = 8000;
 const SUCCESS_MESSAGE =
   "お問い合わせありがとうございます。内容を受け付けました。入力いただいたメールアドレス宛に自動返信メールを送信しました。数分経っても届かない場合は、迷惑メールフォルダをご確認ください。";
+const EMAIL_REGEX =
+  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
 
 // Google が挿入する grecaptcha オブジェクトの最小型定義
 type RecaptchaWindow = Window & {
@@ -90,6 +102,128 @@ export default function ContactForm() {
   const [status, setStatus] = useState<FormState>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touchedFields, setTouchedFields] = useState<
+    Partial<Record<ValidatedFieldKey, boolean>>
+  >({});
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+  const firstRadioRef = useRef<HTMLInputElement>(null);
+  const acceptedInputRef = useRef<HTMLInputElement>(null);
+
+  const validateField = (
+    field: ValidatedFieldKey,
+    value: string | boolean,
+  ): string => {
+    switch (field) {
+      case "name": {
+        const text = String(value).trim();
+        if (!text) return "氏名を入力してください。";
+        return "";
+      }
+      case "email": {
+        const text = String(value).trim();
+        if (!text) return "メールアドレスを入力してください。";
+        if (!EMAIL_REGEX.test(text)) {
+          return "メールアドレスの形式が正しくありません。";
+        }
+        return "";
+      }
+      case "subject": {
+        const text = String(value).trim();
+        if (!text) return "題名を入力してください。";
+        return "";
+      }
+      case "url": {
+        const text = String(value).trim();
+        if (!text) return "";
+        try {
+          const parsed = new URL(text);
+          if (!["http:", "https:"].includes(parsed.protocol)) {
+            return "リンクは http/https のURLを入力してください。";
+          }
+        } catch {
+          return "リンクの形式が正しくありません。";
+        }
+        return "";
+      }
+      case "accepted": {
+        if (!value) return "プライバシーポリシーに同意してください。";
+        return "";
+      }
+      default:
+        return "";
+    }
+  };
+
+  const updateFieldError = (
+    field: ValidatedFieldKey,
+    value: string | boolean,
+  ) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      const error = validateField(field, value);
+      if (error) {
+        next[field] = error;
+      } else {
+        delete next[field];
+      }
+      return next;
+    });
+  };
+
+  const collectValidationErrors = (): FieldErrors => {
+    const errors: FieldErrors = {};
+
+    const nameError = validateField("name", name);
+    if (nameError) errors.name = nameError;
+
+    const emailError = validateField("email", email);
+    if (emailError) errors.email = emailError;
+
+    const subjectError = validateField("subject", subject);
+    if (subjectError) errors.subject = subjectError;
+
+    const urlError = validateField("url", url);
+    if (urlError) errors.url = urlError;
+
+    const acceptedError = validateField("accepted", accepted);
+    if (acceptedError) errors.accepted = acceptedError;
+
+    return errors;
+  };
+
+  const focusField = (field: FocusFieldKey) => {
+    const target =
+      field === "name"
+        ? nameInputRef.current
+        : field === "email"
+          ? emailInputRef.current
+          : field === "subject"
+            ? subjectInputRef.current
+            : field === "url"
+              ? urlInputRef.current
+              : field === "radio"
+                ? firstRadioRef.current
+                : acceptedInputRef.current;
+
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.focus();
+  };
+
+  const markAllValidatedFieldsTouched = () => {
+    setTouchedFields({
+      name: true,
+      email: true,
+      subject: true,
+      url: true,
+      accepted: true,
+    });
+  };
 
   // チェックボックスの選択状態をトグル
   const toggleCheckboxValue = (value: ChoiceOption) => {
@@ -120,6 +254,31 @@ export default function ContactForm() {
     return () => window.clearTimeout(timeoutId);
   }, [status, statusMessage]);
 
+  // サーバーエラー文言から該当項目を推測し、該当入力へ移動する
+  useEffect(() => {
+    if (status !== "error" || !statusMessage) return;
+
+    const target =
+      statusMessage.includes("氏名")
+        ? "name"
+        : statusMessage.includes("メールアドレス")
+          ? "email"
+          : statusMessage.includes("題名")
+            ? "subject"
+            : statusMessage.includes("リンク")
+              ? "url"
+              : statusMessage.includes("ラジオボタン")
+                ? "radio"
+                : statusMessage.includes("プライバシーポリシー") ||
+                    statusMessage.includes("同意")
+                  ? "accepted"
+                  : null;
+
+    if (target) {
+      focusField(target);
+    }
+  }, [status, statusMessage]);
+
   const closeConfirmModal = () => {
     if (status === "sending") return;
     setIsConfirmOpen(false);
@@ -128,6 +287,18 @@ export default function ContactForm() {
   // モーダル上の「送信する」押下時のみ、実際のAPI送信を実行する
   const handleConfirmSend = async () => {
     if (status === "sending") return;
+
+    const errors = collectValidationErrors();
+    const firstErrorField = VALIDATED_FIELDS.find((field) => !!errors[field]);
+    if (firstErrorField) {
+      setFieldErrors(errors);
+      markAllValidatedFieldsTouched();
+      setStatus("error");
+      setStatusMessage("入力内容を確認してください。");
+      setIsConfirmOpen(false);
+      focusField(firstErrorField);
+      return;
+    }
 
     if (!accepted) {
       setStatus("error");
@@ -184,6 +355,8 @@ export default function ContactForm() {
 
       setStatus("success");
       setStatusMessage(payload.message || SUCCESS_MESSAGE);
+      setFieldErrors({});
+      setTouchedFields({});
       setName("");
       setEmail("");
       setSubject("");
@@ -211,6 +384,17 @@ export default function ContactForm() {
     event.preventDefault();
     if (status === "sending") return;
 
+    const errors = collectValidationErrors();
+    const firstErrorField = VALIDATED_FIELDS.find((field) => !!errors[field]);
+    if (firstErrorField) {
+      setFieldErrors(errors);
+      markAllValidatedFieldsTouched();
+      setStatus("error");
+      setStatusMessage("入力内容を確認してください。");
+      focusField(firstErrorField);
+      return;
+    }
+
     // 同意未チェックならモーダルを開かずに理由を即時表示する
     if (!accepted) {
       setStatus("error");
@@ -220,6 +404,7 @@ export default function ContactForm() {
 
     setStatus("idle");
     setStatusMessage("");
+    setFieldErrors({});
     setIsConfirmOpen(true);
   };
 
@@ -227,7 +412,12 @@ export default function ContactForm() {
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4" aria-busy={isSending}>
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="mt-6 space-y-4"
+        aria-busy={isSending}
+      >
         <fieldset disabled={isSending} className="space-y-4">
           {/* bot が埋めやすい隠し項目（埋まっていたらサーバー側で破棄） */}
           <input
@@ -243,35 +433,89 @@ export default function ContactForm() {
           <label className="flex flex-col text-sm">
             氏名
             <input
+              ref={nameInputRef}
               name="name"
               type="text"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setName(value);
+                if (touchedFields.name) {
+                  updateFieldError("name", value);
+                }
+              }}
+              onBlur={() => {
+                setTouchedFields((prev) => ({ ...prev, name: true }));
+                updateFieldError("name", name);
+              }}
               className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              aria-invalid={Boolean(fieldErrors.name)}
+              aria-describedby={fieldErrors.name ? "name-error" : undefined}
               required
             />
+            {fieldErrors.name ? (
+              <p id="name-error" className="mt-1 text-xs text-red-700">
+                {fieldErrors.name}
+              </p>
+            ) : null}
           </label>
           <label className="flex flex-col text-sm">
             メールアドレス
             <input
+              ref={emailInputRef}
               name="email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setEmail(value);
+                if (touchedFields.email) {
+                  updateFieldError("email", value);
+                }
+              }}
+              onBlur={() => {
+                setTouchedFields((prev) => ({ ...prev, email: true }));
+                updateFieldError("email", email);
+              }}
               className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
               required
             />
+            {fieldErrors.email ? (
+              <p id="email-error" className="mt-1 text-xs text-red-700">
+                {fieldErrors.email}
+              </p>
+            ) : null}
           </label>
           <label className="flex flex-col text-sm">
             題名
             <input
+              ref={subjectInputRef}
               name="subject"
               type="text"
               value={subject}
-              onChange={(event) => setSubject(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSubject(value);
+                if (touchedFields.subject) {
+                  updateFieldError("subject", value);
+                }
+              }}
+              onBlur={() => {
+                setTouchedFields((prev) => ({ ...prev, subject: true }));
+                updateFieldError("subject", subject);
+              }}
               className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              aria-invalid={Boolean(fieldErrors.subject)}
+              aria-describedby={fieldErrors.subject ? "subject-error" : undefined}
               required
             />
+            {fieldErrors.subject ? (
+              <p id="subject-error" className="mt-1 text-xs text-red-700">
+                {fieldErrors.subject}
+              </p>
+            ) : null}
           </label>
           <label className="flex flex-col text-sm">
             メッセージ本文（任意）
@@ -286,13 +530,31 @@ export default function ContactForm() {
           <label className="flex flex-col text-sm">
             リンク
             <input
+              ref={urlInputRef}
               name="url"
               type="url"
               value={url}
-              onChange={(event) => setUrl(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setUrl(value);
+                if (touchedFields.url) {
+                  updateFieldError("url", value);
+                }
+              }}
+              onBlur={() => {
+                setTouchedFields((prev) => ({ ...prev, url: true }));
+                updateFieldError("url", url);
+              }}
               className="mt-1 rounded border border-zinc-300 px-3 py-2"
+              aria-invalid={Boolean(fieldErrors.url)}
+              aria-describedby={fieldErrors.url ? "url-error" : undefined}
               placeholder="https://example.com"
             />
+            {fieldErrors.url ? (
+              <p id="url-error" className="mt-1 text-xs text-red-700">
+                {fieldErrors.url}
+              </p>
+            ) : null}
           </label>
           <label className="flex flex-col text-sm">
             電話番号
@@ -362,6 +624,7 @@ export default function ContactForm() {
             {RADIO_OPTIONS.map((option) => (
               <label key={option} className="flex items-center gap-2">
                 <input
+                  ref={option === RADIO_OPTIONS[0] ? firstRadioRef : undefined}
                   type="radio"
                   name="radioValue"
                   value={option}
@@ -375,13 +638,31 @@ export default function ContactForm() {
 
           <label className="flex items-center gap-2 text-sm">
             <input
+              ref={acceptedInputRef}
               type="checkbox"
               name="accepted"
               checked={accepted}
-              onChange={(event) => setAccepted(event.target.checked)}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setAccepted(checked);
+                if (touchedFields.accepted) {
+                  updateFieldError("accepted", checked);
+                }
+              }}
+              onBlur={() => {
+                setTouchedFields((prev) => ({ ...prev, accepted: true }));
+                updateFieldError("accepted", accepted);
+              }}
+              aria-invalid={Boolean(fieldErrors.accepted)}
+              aria-describedby={fieldErrors.accepted ? "accepted-error" : undefined}
             />
             <span>プライバシーポリシーに同意して下さい。</span>
           </label>
+          {fieldErrors.accepted ? (
+            <p id="accepted-error" className="-mt-2 text-xs text-red-700">
+              {fieldErrors.accepted}
+            </p>
+          ) : null}
 
           <button
             type="submit"
