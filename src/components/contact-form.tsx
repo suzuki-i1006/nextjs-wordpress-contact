@@ -8,6 +8,9 @@ type ChoiceOption = "選択肢 1" | "選択肢 2" | "選択肢 3";
 const SELECT_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
 const CHECKBOX_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
 const RADIO_OPTIONS: ChoiceOption[] = ["選択肢 1", "選択肢 2", "選択肢 3"];
+const SUCCESS_MESSAGE_AUTO_HIDE_MS = 8000;
+const SUCCESS_MESSAGE =
+  "お問い合わせありがとうございます。内容を受け付けました。入力いただいたメールアドレス宛に自動返信メールを送信しました。数分経っても届かない場合は、迷惑メールフォルダをご確認ください。";
 
 // Google が挿入する grecaptcha オブジェクトの最小型定義
 type RecaptchaWindow = Window & {
@@ -105,14 +108,14 @@ export default function ContactForm() {
     });
   }, [recaptchaSiteKey]);
 
-  // 送信成功メッセージは3秒後に自動で消す
+  // 送信成功メッセージは指定秒数後に自動で消す
   useEffect(() => {
     if (status !== "success" || !statusMessage) return;
 
     const timeoutId = window.setTimeout(() => {
       setStatusMessage("");
       setStatus("idle");
-    }, 3000);
+    }, SUCCESS_MESSAGE_AUTO_HIDE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [status, statusMessage]);
@@ -180,7 +183,7 @@ export default function ContactForm() {
       }
 
       setStatus("success");
-      setStatusMessage(payload.message || "Sent successfully.");
+      setStatusMessage(payload.message || SUCCESS_MESSAGE);
       setName("");
       setEmail("");
       setSubject("");

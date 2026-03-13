@@ -147,6 +147,8 @@ const CF7_FIELD_LABELS: Record<string, string> = {
   [CF7_RADIO_FIELD]: "ラジオボタン",
   [CF7_ACCEPTANCE_FIELD]: "プライバシーポリシー同意",
 };
+const SUCCESS_MESSAGE =
+  "お問い合わせありがとうございます。内容を受け付けました。入力いただいたメールアドレス宛に自動返信メールを送信しました。数分経っても届かない場合は、迷惑メールフォルダをご確認ください。";
 
 const EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
@@ -811,7 +813,7 @@ export async function POST(request: NextRequest) {
     const honeypot = normalizeField(raw.website);
     if (honeypot) {
       return NextResponse.json(
-        { success: true, message: "メールを送信しました。" },
+        { success: true, message: SUCCESS_MESSAGE },
         { status: 200 },
       );
     }
@@ -1055,7 +1057,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "メールを送信しました。",
+        message: SUCCESS_MESSAGE,
         status: "mail_sent",
       },
       { status: 200 },
