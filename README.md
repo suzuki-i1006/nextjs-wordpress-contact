@@ -13,9 +13,8 @@
 3. API ルートが CF7 用の形式に変換して WordPress REST API に送る
 4. CF7 が `mail_sent` を返したら送信成功として画面に表示する
 
-## 1-1. SendGrid から CF7 へ移行する場合（記入例つき）
+## 1-1. SendGrid から CF7 へ移行する場合
 
-この README は「既存の Next.js + SendGrid 送信」を「Next.js + CF7 連携」に置き換える用途でも使えます。
 
 ### 移行イメージ
 
@@ -371,16 +370,3 @@ curl.exe -X POST ^
    - `Content-Type` や送信形式の不一致
 5. `400 wpcf7_unit_tag_not_found`
    - `_wpcf7_unit_tag` 不一致（`CF7_UNIT_TAG` を調整）
-
-## 10. 本番前チェックリスト
-
-1. `.env.local` が Git 管理に入っていないこと
-2. 管理者通知メールが届くこと
-3. 自動返信メール（メール 2）が届くこと
-4. フォーム必須項目チェックが機能すること
-5. 失敗時のメッセージがユーザーに分かること
-6. `CONTACT_ALLOWED_ORIGINS` と `CONTACT_DEBUG=0` を本番値にすること
-7. `WORDPRESS_REQUIRE_AUTH=1` を必要に応じて有効化すること
-8. `RECAPTCHA_REQUIRED=1` と `RECAPTCHA_SECRET_KEY` を本番値にすること
-
----
